@@ -1,0 +1,11 @@
+{:itonami.blueprint/id "cloud-itonami-0891"
+ :itonami.blueprint/name "Chemical and Fertilizer Mineral Mining Operations"
+ :itonami.blueprint/isic-rev5 "0891"
+ :itonami.blueprint/domain :mining/chemical-mineral
+ :itonami.blueprint/license "AGPL-3.0-or-later"
+ :itonami.blueprint/social-impact [:supply-chain :environmental-stewardship :resource-efficiency]
+ :itonami.blueprint/governor :chem-mineral-governor
+ :itonami.blueprint/robotics true
+ :itonami.blueprint/required-technologies [:robotics :identity :forms :dmn :bpmn :audit-ledger :telemetry]
+ :itonami.blueprint/status :public-oss
+ :itonami.blueprint/maturity :implemented}
