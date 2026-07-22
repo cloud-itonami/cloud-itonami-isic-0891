@@ -31,10 +31,9 @@
   material cooperative trusting a quarry operator needs, and the
   evidence an operator needs if an extraction or a shipment is later
   disputed."
-  (:require #?(:clj  [clojure.edn :as edn]
-               :cljs [cljs.reader :as edn])
-            [chemmineops.registry :as registry]
-            [langchain.db :as d]))
+  (:require [chemmineops.registry :as registry]
+            [langchain.db :as d]
+            [langchain-store.core :as ls]))
 
 (defprotocol Store
   (extraction [s id])
@@ -217,8 +216,10 @@
    :extraction-sequence/jurisdiction {:db/unique :db.unique/identity}
    :shipment-sequence/jurisdiction   {:db/unique :db.unique/identity}})
 
-(defn- enc [v] (pr-str v))
-(defn- dec* [s] (when s (edn/read-string s)))
+;; EDN-blob codec: kotoba-lang/langchain-store's shared machinery
+;; (ADR-2607141600) instead of a hand-rolled two-liner.
+(defn- enc [v] (ls/enc v))
+(defn- dec* [s] (ls/dec* s))
 
 (defn- extraction->tx [{:keys [id site material-type permit-id permit-valid?
                               involves-blasting? blast-clearance-confirmed?
