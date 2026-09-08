@@ -24,7 +24,7 @@
   shipping a consignment itself (that is `chemmineops.operation`'s
   `:extraction/extract`/`:consignment/ship`, always human-gated --
   see README `Actuation`)."
-  (:require [clojure.string :as str]))
+  (:require [kotoba.lang.text :as str]))
 
 (defn- unsigned-certificate
   "Every certificate this actor produces is UNSIGNED -- signature is
@@ -99,7 +99,7 @@
     (throw (ex-info "extraction: jurisdiction required" {})))
   (when (< sequence 0)
     (throw (ex-info "extraction: sequence must be >= 0" {})))
-  (let [extraction-number (str (str/upper-case jurisdiction) "-EXT-" (zero-pad sequence 6))
+  (let [extraction-number (str (str/upper jurisdiction) "-EXT-" (zero-pad sequence 6))
         record {"record_id" extraction-number
                 "kind" "extraction-draft"
                 "extraction_id" extraction-id
@@ -124,7 +124,7 @@
     (throw (ex-info "consignment-shipment: jurisdiction required" {})))
   (when (< sequence 0)
     (throw (ex-info "consignment-shipment: sequence must be >= 0" {})))
-  (let [shipment-number (str (str/upper-case jurisdiction) "-SHP-" (zero-pad sequence 6))
+  (let [shipment-number (str (str/upper jurisdiction) "-SHP-" (zero-pad sequence 6))
         record {"record_id" shipment-number
                 "kind" "consignment-shipment-draft"
                 "extraction_id" extraction-id
