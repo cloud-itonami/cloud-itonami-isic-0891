@@ -8,7 +8,7 @@
   no timestamps in the page content, byte-identical across reruns
   against the same seed.
 
-  Usage: `clojure -M:dev:render-html [out-file]`
+  Usage: `kbb -M:dev:render-html [out-file]`
   (default `docs/samples/operator-console.html`)."
   (:require [kotoba.lang.text :as str]
             [chemmineops.store :as store]

@@ -27,9 +27,9 @@
   :dev {:override-deps
         {io.github.kotoba-lang/langchain
          {:local/root "../../kotoba-lang/langchain"}}}
-  ;; clojure -M:dev:run  -> drive the demo through one OperationActor
+  ;; kbb -M:dev:run  -> drive the demo through one OperationActor
   :run {:main-opts ["-m" "chemmineops.sim"]}
-  ;; clojure -M:dev:render-html  -> real actor stack -> operator-console.html
+  ;; kbb -M:dev:render-html  -> real actor stack -> operator-console.html
   :render-html {:main-opts ["-m" "chemmineops.render-html"]}
   :test {:extra-paths ["test"]
          :extra-deps {io.github.cognitect-labs/test-runner
