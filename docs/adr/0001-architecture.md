@@ -167,7 +167,7 @@ extracting material or auto-shipping a consignment).
 - `MemStore` ‖ `DatomicStore` parity is proven by
   `test/quarryops/store_contract_test.clj`.
 - 39 tests / 176 assertions pass; lint is clean; the demo
-  (`clojure -M:dev:run`) walks two clean extraction+shipment
+  (`kbb -M:dev:run`) walks two clean extraction+shipment
   lifecycles (no-blast, blast-confirmed), plus four HARD-hold
   scenarios, end-to-end.
 - `blueprint.edn` required no field-sync fixes this time (already

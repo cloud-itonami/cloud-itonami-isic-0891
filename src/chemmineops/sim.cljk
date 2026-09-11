@@ -1,5 +1,5 @@
 (ns chemmineops.sim
-  "Demo driver -- `clojure -M:dev:run`. Walks a clean extraction
+  "Demo driver -- `kbb -M:dev:run`. Walks a clean extraction
   through intake -> jurisdiction assessment -> robot bench-face/
   quarry-face verification mission (escalate/approve) -> material
   extraction (escalate/approve/commit) -> consignment shipment
