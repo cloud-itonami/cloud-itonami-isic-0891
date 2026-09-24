@@ -1,0 +1,34 @@
+(ns chemmineops.physics-probe-test
+  "The probe is the bot's only source of \"measured\"; these pin that it
+  measures (every run numeric, count = expected), that the numbers come
+  from the simulation (the derived boundary really straddles the
+  tolerance flip), and that a changed solver would show."
+  (:require [clojure.test :refer [deftest is testing]]
+            [chemmineops.physics-probe :as probe]))
+
+(deftest probe-measures-every-run
+  (let [p (probe/probe)]
+    (is (= "itonami.physical-ai.probe.v1" (:physics-probe/schema p)))
+    (is (pos? (:count p)))
+    (is (= (:count p) (:expected p) (count (:runs p))))
+    (doseq [r (:runs p)]
+      (is (number? (get-in r [:quantities :sim-impact-energy-j])))
+      (is (number? (get-in r [:quantities :sim-effective-restitution])))
+      (is (pos? (get-in r [:quantities :ticks]))))))
+
+(deftest quantities-rise-with-drop-height
+  (let [qs (map :quantities (:runs (probe/probe)))]
+    (is (apply < (map :sim-impact-energy-j qs)))
+    (is (apply < (map :sim-impact-velocity-mps qs)))
+    (is (apply < (map :sim-first-rebound-height-m qs)))
+    (is (apply < (map :sim-settling-distance-m qs)))))
+
+(deftest derived-boundary-straddles-the-tolerance-flip
+  (let [h (probe/max-passing-drop-height-m)]
+    (is (number? h))
+    (testing "at the boundary the block is contained; 1% higher it is not"
+      (is (not (probe/out-at? h)))
+      (is (probe/out-at? (* 1.01 h))))))
+
+(deftest bracket-that-does-not-straddle-answers-nil
+  (is (nil? (probe/max-passing-drop-height-m 0.5 5.0 10))))

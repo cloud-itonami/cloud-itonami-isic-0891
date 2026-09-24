@@ -1,0 +1,52 @@
+(ns chemmineops.simphysics-test
+  "chemmineops.simphysics runs a real physics-2d rockfall: these pin that
+  the trajectory obeys the physics it claims (energy not created, bounce
+  bounded by the input restitution, settling ~ drop height), that the
+  tolerance reads the record's own rating, and that it is deterministic."
+  (:require [clojure.test :refer [deftest is testing]]
+            [chemmineops.simphysics :as sp]))
+
+(def fixture {:fragment-mass-kg 180.0 :bench-drop-height-m 4.0})
+
+(deftest trajectory-is-time-stepped
+  (let [s (sp/simulate-rockfall fixture)]
+    (is (= (inc sp/ticks-run) (:ticks s) (count (:trajectory s))))
+    (is (= sp/dt-s (:dt s)))))
+
+(deftest energy-is-not-created-by-the-solver
+  (let [{:keys [sim-impact-energy-j sim-impact-velocity-mps]} (sp/rockfall-telemetry-for fixture)
+        mgh (* 180.0 sp/g-mps2 4.0)]
+    (testing "impact KE is within 10% below m g h and never above it"
+      (is (<= sim-impact-energy-j mgh))
+      (is (> sim-impact-energy-j (* 0.9 mgh))))
+    (is (< sim-impact-velocity-mps (Math/sqrt (* 2 sp/g-mps2 4.0))))))
+
+(deftest bounce-is-bounded-by-the-input-restitution
+  (let [{:keys [sim-first-rebound-height-m sim-effective-restitution]} (sp/rockfall-telemetry-for fixture)]
+    (is (pos? sim-first-rebound-height-m))
+    (is (< sim-first-rebound-height-m 4.0))
+    (is (<= sim-effective-restitution sp/fragment-restitution))
+    (is (> sim-effective-restitution (* 0.8 sp/fragment-restitution)))))
+
+(deftest settling-distance-tracks-the-drop
+  (let [d (:sim-settling-distance-m (sp/rockfall-telemetry-for fixture))]
+    (is (< (Math/abs (- d 4.0)) 0.05))))
+
+(deftest heavier-block-carries-proportionally-more-energy
+  (let [e (fn [m] (:sim-impact-energy-j (sp/rockfall-telemetry-for {:fragment-mass-kg m :bench-drop-height-m 4.0})))]
+    (is (< (e 50.0) (e 500.0)))))
+
+(deftest tolerance-reads-the-records-own-rating
+  (let [t (sp/rockfall-telemetry-for fixture)]
+    (is (not (sp/rockfall-out-of-tolerance? (merge fixture t))))
+    (is (sp/rockfall-out-of-tolerance? (merge fixture t {:catch-bench-rated-height-m 3.0})))
+    (testing "an unmeasured record is never reported out of tolerance"
+      (is (not (sp/rockfall-out-of-tolerance? fixture))))))
+
+(deftest defaults-apply-when-fields-are-absent
+  (is (= {:fragment-mass-kg sp/default-fragment-mass-kg
+          :bench-drop-height-m sp/default-bench-drop-height-m}
+         (sp/inputs-for {}))))
+
+(deftest deterministic
+  (is (= (sp/rockfall-telemetry-for fixture) (sp/rockfall-telemetry-for fixture))))
