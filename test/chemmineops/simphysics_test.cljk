@@ -3,7 +3,7 @@
   the trajectory obeys the physics it claims (energy not created, bounce
   bounded by the input restitution, settling ~ drop height), that the
   tolerance reads the record's own rating, and that it is deterministic."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [chemmineops.simphysics :as sp]))
 
 (def fixture {:fragment-mass-kg 180.0 :bench-drop-height-m 4.0})
