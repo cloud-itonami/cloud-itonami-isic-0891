@@ -3,7 +3,7 @@
   measures (every run numeric, count = expected), that the numbers come
   from the simulation (the derived boundary really straddles the
   tolerance flip), and that a changed solver would show."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [chemmineops.physics-probe :as probe]))
 
 (deftest probe-measures-every-run

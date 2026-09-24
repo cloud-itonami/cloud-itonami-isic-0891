@@ -1,5 +1,5 @@
 (ns chemmineops.registry-test
-  (:require [clojure.test :refer [deftest is]]
+  (:require [kotoba.test :refer [deftest is]]
             [chemmineops.registry :as r]))
 
 ;; ----------------------------- royalty-matches-claim? -----------------------------
