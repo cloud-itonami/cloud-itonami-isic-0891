@@ -1,0 +1,157 @@
+(ns chemmineops.simphysics
+  "Bench-face loose-block rockfall simulated with the REAL `physics-2d`
+  time-stepped rigid-body impulse solver -- the physics the robot's
+  bench-face verification mission (`chemmineops.robotics`) is about.
+
+  HONEST SCOPE. Before this ns the vertical had NO physics at all:
+  `chemmineops.robotics/face-boundary-deviation-out-of-range?` compares
+  the extraction's own recorded face-deviation fields, nothing is
+  simulated. This ns adds a real simulation ALONGSIDE that check; it
+  does not (yet) replace it, and `chemmineops.governor` does not call it
+  (that wiring is the bot's first growth candidate, see
+  hermes/profiles/physai-isic-0891/SOUL.md).
+
+  Model: a loose block of the extraction's own `:fragment-mass-kg` is a
+  `physics-2d` Body2D (cubic AABB sized from mass and a disclosed rock
+  density) released at rest with its base `:bench-drop-height-m` above a
+  static catch-bench floor (top face at y = 0), under gravity
+  [0 -9.81]. The world is stepped at a fixed `dt-s` for `ticks-run`
+  ticks and every quantity below is read back from that trajectory:
+
+    impact velocity  -- largest downward speed reached (m/s)
+    impact energy    -- 1/2 m v^2 at that speed (J)
+    rebound height   -- apex of the first bounce above the final rest
+                        position (m)
+    effective COR    -- sqrt(rebound / drop), the restitution the solver
+                        actually realised (compare `fragment-restitution`)
+    settling distance-- start height minus final height (m)
+
+  Tolerance (`rockfall-out-of-tolerance?`): the settling distance must
+  not exceed the extraction's own `:catch-bench-rated-height-m`, and the
+  impact energy must not exceed m g (rated height). Pure, deterministic,
+  no IO."
+  (:require [physics-2d :as p2d]))
+
+(def ^:const g-mps2 "Earth gravity (m/s^2)." 9.81)
+
+(def ^:const dt-s
+  "Fixed solver step (s), 100 Hz: at the swept drop heights the block
+  moves < 0.2 m per tick, well under its own AABB half-height, so it
+  cannot tunnel through the 1 m floor slab."
+  0.01)
+
+(def ^:const ticks-run
+  "Ticks stepped per run (6 s simulated): longer than the free-fall time
+  of every swept height (12 m -> 1.56 s) plus several bounces."
+  600)
+
+(def ^:const rock-density-kg-per-m3
+  "Disclosed engineering prior, not a per-site measurement: bulk density
+  of phosphate / potash host rock, taken as 2700 kg/m^3 (the same
+  hard-rock figure the sibling quarry actor isic-0810 uses). Sizes the
+  collider only; free-fall kinematics do not depend on it."
+  2700.0)
+
+(def ^:const fragment-restitution
+  "Disclosed engineering prior: normal coefficient of restitution for
+  rock on a rock/talus catch bench. Rockfall-dynamics practice uses
+  roughly 0.2-0.4; 0.3 here, on both bodies (physics-2d combines them as
+  sqrt(ra*rb), so the effective input is 0.3)."
+  0.3)
+
+(def default-fragment-mass-kg
+  "Fallback block mass (kg) when the extraction record has none."
+  150.0)
+
+(def default-bench-drop-height-m
+  "Fallback drop height (m) when the extraction record has none."
+  4.0)
+
+(def default-catch-bench-rated-height-m
+  "Fallback catch-bench design rating (m) when the extraction record has
+  none -- a disclosed typical single-bench catch height, not a cited
+  per-site value."
+  10.0)
+
+(defn- cbrt* [x]
+  #?(:cljs (js/Math.cbrt x)
+     :default (Math/cbrt (double x))))
+
+(defn- sqrt* [x]
+  #?(:cljs (js/Math.sqrt x)
+     :default (Math/sqrt (double x))))
+
+(defn- abs* [x] (if (neg? x) (- x) x))
+
+(defn fragment-half-extent-m
+  "Half edge (m) of the cubic AABB for a block of `mass-kg`."
+  [mass-kg]
+  (/ (cbrt* (/ (double mass-kg) rock-density-kg-per-m3)) 2.0))
+
+(defn- first-rebound-apex-y
+  "Highest y reached between the first upward-moving tick (the block has
+  bounced) and the next downward-moving tick. nil when it never bounces."
+  [traj]
+  (let [after (drop-while #(neg? (second (:velocity %)))
+                          (drop-while #(>= (second (:velocity %)) 0.0) (rest traj)))
+        rising (take-while #(>= (second (:velocity %)) 0.0) after)
+        apex-window (concat rising (take 1 (drop (count rising) after)))]
+    (when (seq rising)
+      (reduce max (map #(second (:position %)) apex-window)))))
+
+(defn simulate-rockfall
+  "Run the REAL physics-2d rockfall for `{:fragment-mass-kg :bench-drop-height-m}`
+  and return the measured quantities plus the trajectory."
+  [{:keys [fragment-mass-kg bench-drop-height-m]}]
+  (let [m (double fragment-mass-kg)
+        h (double bench-drop-height-m)
+        a (fragment-half-extent-m m)
+        start-y (+ h a)
+        w0 (p2d/world-new [0.0 (- g-mps2)])
+        [w1 _] (p2d/world-add w0 (p2d/make-body {:position [0.0 -0.5] :mass 0.0
+                                                 :restitution fragment-restitution
+                                                 :collider (p2d/make-aabb-collider 50.0 0.5)}))
+        [w2 id] (p2d/world-add w1 (p2d/make-body {:position [0.0 start-y] :mass m
+                                                  :restitution fragment-restitution
+                                                  :collider (p2d/make-aabb-collider a a)}))
+        traj (loop [w w2 i 0 acc []]
+               (let [b (nth (:bodies w) id)
+                     acc' (conj acc {:tick i :position (:position b) :velocity (:velocity b)})]
+                 (if (>= i ticks-run)
+                   acc'
+                   (recur (p2d/world-step w dt-s) (inc i) acc'))))
+        final-y (second (:position (peek traj)))
+        v-impact (reduce max 0.0 (map #(abs* (second (:velocity %))) traj))
+        apex (first-rebound-apex-y traj)
+        rebound (when apex (- apex final-y))]
+    {:trajectory traj
+     :sim-impact-velocity-mps v-impact
+     :sim-impact-energy-j (* 0.5 m v-impact v-impact)
+     :sim-first-rebound-height-m rebound
+     :sim-effective-restitution (when (and rebound (pos? h) (>= rebound 0.0)) (sqrt* (/ rebound h)))
+     :sim-settling-distance-m (- start-y final-y)
+     :ticks (count traj)
+     :dt dt-s}))
+
+(defn inputs-for
+  "Simulation inputs for `extraction`, defaults applied when absent."
+  [{:keys [fragment-mass-kg bench-drop-height-m]}]
+  {:fragment-mass-kg (or fragment-mass-kg default-fragment-mass-kg)
+   :bench-drop-height-m (or bench-drop-height-m default-bench-drop-height-m)})
+
+(defn rockfall-telemetry-for
+  "The simulated quantities (no trajectory) for `extraction`."
+  [extraction]
+  (dissoc (simulate-rockfall (inputs-for extraction)) :trajectory))
+
+(defn rockfall-out-of-tolerance?
+  "Does `extraction`'s own simulated telemetry exceed its own catch-bench
+  rating? Needs numeric `:sim-settling-distance-m` and
+  `:sim-impact-energy-j` on the record (false otherwise -- an
+  unmeasured record is never reported as in or out)."
+  [{:keys [sim-settling-distance-m sim-impact-energy-j catch-bench-rated-height-m] :as extraction}]
+  (and (number? sim-settling-distance-m) (number? sim-impact-energy-j)
+       (let [rated (or catch-bench-rated-height-m default-catch-bench-rated-height-m)
+             m (:fragment-mass-kg (inputs-for extraction))]
+         (or (> sim-settling-distance-m rated)
+             (> sim-impact-energy-j (* (double m) g-mps2 rated))))))

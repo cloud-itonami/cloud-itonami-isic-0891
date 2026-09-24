@@ -1,0 +1,84 @@
+(ns chemmineops.physics-probe
+  "The physical-AI bot's measurement: run this actor's REAL `physics-2d`
+  bench-face rockfall simulation (`chemmineops.simphysics`) over a fixed
+  sweep and print ONE EDN map of the physical quantities it computed.
+
+    kbb -M:dev:physics
+
+  This is what the resident bot (hermes/profiles/physai-isic-0891/SOUL.md)
+  reads every tick. Every number is read back from a time-stepped
+  trajectory, never typed in. Schema `itonami.physical-ai.probe.v1`:
+
+    {:physics-probe/schema \"itonami.physical-ai.probe.v1\"
+     :repo :procedure :solver
+     :runs    [{:input {...} :quantities {...} :out-of-tolerance? bool} ...]
+     :derived {...}  ; quantities computed ACROSS runs
+     :count n :expected n}
+
+  `:count` is an evidence floor: 0 means \"could not measure\", never
+  \"nothing out of tolerance\". Exit 0 when every run produced numbers,
+  2 when any run did not."
+  (:require [chemmineops.simphysics :as sp]))
+
+(def schema "itonami.physical-ai.probe.v1")
+
+(def fragment-mass-kg
+  "Block mass held fixed across the sweep: the simphysics tests' fixture."
+  180.0)
+
+(def sweep-drop-heights-m
+  "Drop heights swept each tick; they bracket the default 10 m
+  catch-bench rating from both sides (4.0 m is the default drop)."
+  [1.0 2.0 4.0 8.0 12.0])
+
+(defn- extraction [drop-m]
+  {:fragment-mass-kg fragment-mass-kg :bench-drop-height-m drop-m})
+
+(defn out-at? [drop-m]
+  (let [e (extraction drop-m)]
+    (sp/rockfall-out-of-tolerance? (merge e (sp/rockfall-telemetry-for e)))))
+
+(defn- run-one [drop-m]
+  (let [e (extraction drop-m)
+        t (sp/rockfall-telemetry-for e)]
+    {:input e
+     :quantities t
+     :out-of-tolerance? (sp/rockfall-out-of-tolerance? (merge e t))}))
+
+(defn max-passing-drop-height-m
+  "Largest drop height the default catch bench contains, by bisection over
+  the REAL simulation (tolerance flips once across the bracket). nil when
+  the bracket does not straddle the flip."
+  ([] (max-passing-drop-height-m 0.5 20.0 40))
+  ([lo hi iters]
+   (when (and (not (out-at? lo)) (out-at? hi))
+     (loop [lo lo hi hi i 0]
+       (if (>= i iters)
+         lo
+         (let [mid (/ (+ lo hi) 2.0)]
+           (if (out-at? mid)
+             (recur lo mid (inc i))
+             (recur mid hi (inc i)))))))))
+
+(defn probe []
+  (let [runs (mapv run-one sweep-drop-heights-m)
+        numeric? (fn [r] (every? #(number? (get-in r [:quantities %]))
+                                 [:sim-impact-energy-j :sim-settling-distance-m :sim-effective-restitution]))]
+    {:physics-probe/schema schema
+     :repo "cloud-itonami/cloud-itonami-isic-0891"
+     :procedure "Bench-face loose-block rockfall onto a catch bench (robot bench-face verification before :actuation/extract-material)"
+     :solver "physics-2d/world-step"
+     :runs runs
+     :derived {:catch-bench-rated-height-m sp/default-catch-bench-rated-height-m
+               :fragment-mass-kg fragment-mass-kg
+               :input-restitution sp/fragment-restitution
+               :max-passing-drop-height-m (max-passing-drop-height-m)}
+     :count (count (filter numeric? runs))
+     :expected (count sweep-drop-heights-m)}))
+
+(defn -main [& _]
+  (let [p (probe)]
+    (prn p)
+    (when-not (= (:count p) (:expected p))
+      #?(:cljs (set! (.-exitCode js/process) 2)
+         :default (System/exit 2)))))
