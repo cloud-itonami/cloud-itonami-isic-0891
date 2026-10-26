@@ -49,7 +49,7 @@
  {;; offline workspace dev -- pin transitive langchain to local checkout
   :dev {:override-deps
         {io.github.kotoba-lang/langchain
-         {:local/root "../../kotoba-lang/langchain"}}}
+        {:local/root "../../kotoba-lang/kotoba/lib/kotoba.langchain"}}}
   ;; kbb -M:dev:run  -> drive the demo through one OperationActor
   :run {:main-opts ["-m" "chemmineops.sim"]}
   ;; kbb -M:dev:physics -> the physical-AI bot's measurement (hermes/profiles/physai-isic-0891/SOUL.md):
